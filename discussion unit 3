@@ -11,3 +11,59 @@ John the Ripper
 Burp Suite
 
 Hydra
+Nmap: Network maping, it is a command-line tool used for networ discovery and security auditing. it scan the ip address to know what services are running, what ports are open, what operating systems are running
+on a system, and whether there are vulnerabilities.
+nmap <target> → scans a single host.
+
+nmap -sP <network> → discovers all active hosts on a network.
+
+nmap -sV <target> → detects versions of services running on open ports.
+
+nmap -O <target> → attempts to identify the operating system.
+Imagine a hospital IT team wants to secure its internal network. They suspect that some medical IoT devices (like patient monitors or infusion pumps) might be connected without proper authorization.
+
+The team runs Nmap across the hospital subnet: nmap -sV 192.168.1.0/24
+This reveals all devices, their IPs, and open ports.
+
+They discover an unrecognized device with open Telnet (port 23), which is insecure.
+
+Next step: investigate whether it’s a rogue device or a misconfigured medical machine.
+General Explanation: Metasploit Framework
+What it is: Metasploit is a penetration testing framework used to simulate real-world attacks.
+
+How it works: Security teams use it to launch controlled exploits against systems, test defenses, and validate patches.
+
+Key features:
+
+Modules: Exploits, payloads, scanners, and auxiliary tools.
+
+Payloads: Code delivered after a successful exploit (e.g., reverse shell).
+
+Post-exploitation: Tools to test persistence, privilege escalation, or data access.
+
+Basic usage flow:
+
+Identify a target system.
+
+Select an exploit module.
+
+Configure payloads and options.
+
+Launch the exploit.
+
+Observe results and document findings.
+
+Think of Metasploit as a crash-test dummy for hospital systems — you deliberately hit them with attacks to see how they hold up.
+
+🏥 Hospital Scenario: Metasploit
+Imagine your hospital has a patient portal connected to Epic where patients log in to view lab results.
+
+The IT security team suspects the portal may be vulnerable to SQL injection.
+
+They configure Metasploit with a SQL injection exploit module targeting the portal’s login page.
+
+In a controlled test environment (never on live production), they attempt the exploit.
+
+If successful, Metasploit shows that attackers could extract patient PHI.
+
+The hospital then patches the portal’s code and re-tests until the exploit fails.
