@@ -67,3 +67,22 @@ In a controlled test environment (never on live production), they attempt the ex
 If successful, Metasploit shows that attackers could extract patient PHI.
 
 The hospital then patches the portal’s code and re-tests until the exploit fails.
+General Explanation
+What it is: Wireshark is a network protocol analyzer. It captures and inspects packets in real time.
+
+How it works: You can filter traffic by IP, port, or protocol to see exactly what’s flowing across the network.
+
+Use cases: Diagnosing slow systems, spotting suspicious traffic, verifying encryption, or analyzing malware communication.
+
+Think of Wireshark as a microscope for network traffic — it lets you zoom in on the details of communication between devices.
+
+🏥 Hospital Scenario
+Doctors report that the EHR system is lagging during peak hours.
+
+The IT team uses Wireshark to capture traffic between Epic servers and medical devices.
+
+They notice a large amount of unencrypted traffic from an IV pump sending patient identifiers.
+
+This not only explains the slowdown but also reveals a HIPAA compliance risk.
+
+The hospital responds by enforcing TLS encryption on device communications and monitoring for anomalies.
