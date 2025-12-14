@@ -1,0 +1,266 @@
+# **Playbook: Natural‑Language Provisioning of a Production Web Stack on AWS**
+
+*(Front‑end React on S3 + CloudFront; Back‑end Node.js/Express on ECS Fargate behind ALB; RDS in private subnets; Route 53 + ACM; WAF; CI/CD to ECR/ECS and S3/CloudFront)*
+
+> **Purpose**  
+> This document is a copy‑paste‑ready **README/Word playbook** that you can hand to your team (or use yourself) to realize your architecture using a **natural‑language IaC tool**. It includes **prompts** you can paste into **Amazon Q Developer** (Terraform/CloudFormation) or **Pulumi AI**, plus optional **Agents for Amazon Bedrock** conversational flow (Plan → Confirm → Apply).
+>
+> The design follows AWS best‑practice patterns for ECS/Fargate + ALB, CloudFront + S3 with OAC, multi‑AZ VPC networking, and RDS security baselines.
+>
+> **Key references:** ECS + ALB/target groups (Fargate, IP type); ALB target groups & health checks; CloudFront + S3 (secure site, OAC); CloudFront multi‑origin behaviors (S3 + ALB); RDS security best practices (IAM, Secrets Manager, TLS, encryption); Bedrock Agents action groups & confirmation; CloudFormation change sets for plan/apply. [\[thelinuxcode.com\]](https://thelinuxcode.com/invoke-lambda-step-function/), [\[docs.aws.amazon.com\]](https://docs.aws.amazon.com/bedrock/latest/userguide/action-define.html) [\[aws.amazon.com\]](https://aws.amazon.com/blogs/devops/accelerate-your-terraform-development-with-amazon-q-developer/) [\[boto3.amazonaws.com\]](https://boto3.amazonaws.com/v1/documentation/api/1.35.9/reference/services/ec2/client/run_instances.html), [\[boto3.amazonaws.com\]](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/ec2-example-managing-instances.html) [\[codewithmukesh.com\]](https://codewithmukesh.com/blog/aws-step-functions-lambda-dotnet/) [\[dev.to\]](https://dev.to/venkatramanan_46/10-aws-identity-and-access-management-iam-best-practices-for-securing-cloud-permissions-and-2l4l) [\[registry.t...rraform.io\]](https://registry.terraform.io/providers/hashicorp/aws/6.12.0/docs/resources/servicecatalog_provisioned_product), [\[brainstobytes.com\]](https://www.brainstobytes.com/load-balanced-ecs-fargate-from-scratch) [\[docs.aws.amazon.com\]](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-load-balancing.html)
+
+***
+
+## **A. Scope & Success Criteria**
+
+**Architecture overview**
+
+*   **Frontend**: React → S3 (static hosting) → **CloudFront** with custom domain (`myappdomain.com`), ACM cert, Route 53 alias; S3 **not public** (CloudFront OAC). [\[boto3.amazonaws.com\]](https://boto3.amazonaws.com/v1/documentation/api/1.35.9/reference/services/ec2/client/run_instances.html)
+*   **API**: CloudFront behavior `/api/*` → **ALB** (HTTPS), rules → **Target Group (type=ip)** → **ECS Fargate** tasks (Node.js/Express on port 3000). [\[thelinuxcode.com\]](https://thelinuxcode.com/invoke-lambda-step-function/)
+*   **Data**: **RDS** (MySQL or Postgres) in **private subnets**, SG allows **only** ECS tasks; credentials in **AWS Secrets Manager**, storage encryption & TLS enforced. [\[dev.to\]](https://dev.to/venkatramanan_46/10-aws-identity-and-access-management-iam-best-practices-for-securing-cloud-permissions-and-2l4l)
+*   **Networking**: VPC across **2 AZs**, public subnets for ALB, private subnets for ECS/RDS; consider **VPC endpoints** (S3/ECR/Logs); NAT only if tasks need general outbound.
+*   **Security & Observability**: **AWS WAF** on CloudFront; CloudWatch logs/metrics/alarms; least‑privilege IAM; GitHub OIDC for CI/CD.
+*   **CI/CD**: Merge to `main` triggers:
+    *   Frontend: build React, sync S3, **CloudFront invalidation**.
+    *   Backend: build Docker, push to **ECR**, update **ECS service** (rolling), Terraform/CFN **plan + approval** → **apply**.
+
+**Success =** Automated “merge → deploy” with zero‑downtime rollouts, secure network isolation, audited changes, and autoscaling of ECS tasks.
+
+***
+
+## **B. Pre‑requisites & Assumptions**
+
+*   **AWS account & region**: `us-east-1` (ACM cert for CloudFront must be in **us‑east‑1**) [\[boto3.amazonaws.com\]](https://boto3.amazonaws.com/v1/documentation/api/1.35.9/reference/services/ec2/client/run_instances.html)
+*   **Domain**: `myappdomain.com` in **Route 53 hosted zone** (or delegated to it).
+*   **Docker image source**: GitHub repository with Node.js backend (`Dockerfile`).
+*   **React build**: `npm run build` produces static assets.
+*   **Natural‑language tool**: choose **one** primary path below:
+    1.  **Amazon Q Developer** → NL prompts → **Terraform/CloudFormation** code → CI/CD applies. [\[awscli.amazonaws.com\]](https://awscli.amazonaws.com/v2/documentation/api/2.1.21/reference/servicecatalog/provision-product.html)
+    2.  **Pulumi AI** → NL prompts → **Pulumi** program → CI/CD runs `pulumi up`. [\[aws.amazon.com\]](https://aws.amazon.com/architecture/reference-architecture-diagrams/)
+    3.  **Agents for Amazon Bedrock** (optional conversational runtime) → action groups + Lambda → **CloudFormation change sets** for Plan → Confirm → Apply. [\[registry.t...rraform.io\]](https://registry.terraform.io/providers/hashicorp/aws/6.12.0/docs/resources/servicecatalog_provisioned_product), [\[brainstobytes.com\]](https://www.brainstobytes.com/load-balanced-ecs-fargate-from-scratch), [\[docs.aws.amazon.com\]](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-load-balancing.html)
+
+***
+
+## **C. Security Group (SG) Matrix (copy into Word)**
+
+| SG                | Ingress                         | Source               | Egress    | Destination | Notes                                                                                                                                                                                                  |
+| ----------------- | ------------------------------- | -------------------- | --------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **ALB‑SG**        | 80, 443                         | Internet (0.0.0.0/0) | 3000      | **ECS‑SG**  | ALB forwards to ECS on 3000                                                                                                                                                                            |
+| **ECS‑SG**        | 3000                            | **ALB‑SG**           | 3306/5432 | **RDS‑SG**  | Service port; DB port varies by engine                                                                                                                                                                 |
+| **RDS‑SG**        | 3306 (MySQL) or 5432 (Postgres) | **ECS‑SG**           | —         | —           | DB accepts only ECS tasks                                                                                                                                                                              |
+| **S3/CloudFront** | —                               | —                    | —         | —           | Access enforced via **OAC** (CloudFront → S3) [\[boto3.amazonaws.com\]](https://boto3.amazonaws.com/v1/documentation/api/1.35.9/reference/services/ec2/client/run_instances.html) |
+
+***
+
+## **D. Natural‑Language Prompts (copy/paste)**
+
+> Use **one** of the following prompt sets depending on the tool you picked.
+
+### **D1. Amazon Q Developer (Terraform)**
+
+**Prompt A — Generate modules & environment stacks**
+
+```text
+Create Terraform for AWS (us-east-1), with modules and per-environment stacks (dev, prod).
+
+Networking:
+- VPC across 2 AZs with public subnets (ALB) and private subnets (ECS/RDS).
+- Route tables, IGW; add VPC Endpoints for S3, ECR, CloudWatch Logs.
+
+Compute & routing:
+- Application Load Balancer (internet-facing) with HTTPS 443 (ACM cert in us-east-1) and HTTP 80 redirect.
+- Target group type=ip for ECS Fargate; health check /health.
+- ECS cluster + Fargate service "api" (awsvpc), Node.js/Express containerPort 3000, desired=2, rolling deployments. Attach service to ALB target group.
+
+Static & CDN:
+- S3 bucket for React build; block public access; server-side encryption; versioning optional.
+- CloudFront distribution with two origins:
+  - Origin A: S3 with Origin Access Control (OAC) — default behavior for `/`.
+  - Origin B: ALB (HTTPS) — behavior for `/api/*`.
+- Route 53 alias for myappdomain.com to CloudFront.
+
+Data:
+- RDS (choose MySQL on port 3306 or Postgres on 5432) Multi-AZ in private subnets; storage encryption; enforce TLS.
+- Security Groups: RDS ingress only from ECS SG; ECS ingress only from ALB SG; ALB ingress 80/443 from Internet.
+- Credentials stored in AWS Secrets Manager; output secret ARN.
+
+Security & observability:
+- AWS WAF attached to CloudFront (baseline managed rules).
+- CloudWatch alarms: ALB 5xx error rate, ECS CPU/memory, RDS connections.
+- Least-privilege IAM roles for ECS tasks and CI/CD.
+
+Produce:
+- Reusable modules (vpc, alb, ecs, rds, s3_cloudfront, dns, waf, observability).
+- Dev/prod stacks referencing modules with variables.
+- Clear outputs (CloudFront domain, ALB DNS, RDS endpoint, Secret ARN, ECS service name).
+```
+
+**Prompt B — CI/CD (GitHub Actions + OIDC + Terraform plan/apply)**
+
+```text
+Create CI/CD for this repo using GitHub Actions with OIDC to assume an AWS IAM role:
+
+Triggers: on merge to main
+1) Frontend:
+   - Build React (npm ci && npm run build).
+   - Sync build/ to S3 bucket from Terraform outputs.
+   - Create CloudFront invalidation for /*.
+2) Backend:
+   - Build Docker image and tag with commit SHA.
+   - Push to ECR repository from Terraform outputs.
+   - Run 'terraform plan' with the new image tag (ECS task definition update).
+   - Require manual approval for prod, then 'terraform apply' to roll ECS service (rolling update, health-checked).
+
+Provide:
+- GitHub workflow files (.github/workflows/frontend.yml, backend.yml).
+- IAM role trust policy for GitHub OIDC; minimal permissions for S3, CloudFront, ECR, ECS, and Terraform state backend.
+- Example environment variables and secrets (none for AWS keys; use OIDC).
+```
+
+> **Why Terraform with Q Developer?** Q is documented to accelerate Terraform authoring (VPC, ALB, ECS, CodePipeline/CI). You stay in NL, get versioned IaC, and keep **plan/approval** gates. [\[awscli.amazonaws.com\]](https://awscli.amazonaws.com/v2/documentation/api/2.1.21/reference/servicecatalog/provision-product.html)
+
+***
+
+### **D2. Pulumi AI (TypeScript)**
+
+**Prompt — Program + CI/CD**
+
+```text
+Create a Pulumi TypeScript program in us-east-1 that provisions:
+
+- VPC (2 AZs), public subnets for ALB, private subnets for ECS/RDS; add VPC endpoints for S3/ECR/Logs.
+- ALB (HTTPS 443, ACM cert in us-east-1; HTTP 80 redirect), target group type=ip with health check /health.
+- ECS cluster + Fargate service 'api' (Node.js/Express, containerPort 3000, desired=2), attached to ALB target group; rolling updates.
+- RDS (Postgres or MySQL) Multi-AZ in private subnets; SG ingress only from ECS SG; store credentials in Secrets Manager; enforce encryption + TLS.
+- S3 bucket for React build, block public access, SSE; CloudFront distribution with OAC and two origins:
+  - S3 origin default behavior `/`
+  - ALB origin behavior `/api/*`
+- Route 53 alias to CloudFront for myappdomain.com.
+- WAF on CloudFront; CloudWatch alarms (ALB 5xx, ECS CPU/mem, RDS connections).
+- Outputs: CloudFront domain, ALB DNS, RDS endpoint, Secret ARN.
+
+Also provide a GitHub Actions pipeline:
+- Frontend job: build React, sync to S3, invalidate CloudFront.
+- Backend job: build Docker, push to ECR, run 'pulumi up' updating the ECS task image; use GitHub OIDC to assume an AWS IAM role (no static keys).
+```
+
+> **Why Pulumi AI?** It turns NL into a Pulumi program (TypeScript/Python/etc.), then `pulumi up` provisions AWS resources. Teams comfortable with general‑purpose languages often prefer this. [\[aws.amazon.com\]](https://aws.amazon.com/architecture/reference-architecture-diagrams/)
+
+***
+
+### **D3. Agents for Amazon Bedrock (optional conversational runtime)**
+
+**Prompt — Agent instructions (Plan → Confirm → Apply via CloudFormation change sets)**
+
+```text
+Role: You are a provisioning agent for AWS infrastructure. Interpret natural-language requests, elicit only missing details, summarize a plan, require explicit user confirmation, then apply using CloudFormation change sets.
+
+Scope:
+- VPC (2 AZs): public subnets for ALB; private subnets for ECS/RDS; add VPC endpoints for S3/ECR/Logs.
+- ALB: HTTPS 443 (ACM cert us-east-1), HTTP 80 redirect, target group type=ip, health check /health.
+- ECS Fargate 'api': Node.js/Express, containerPort 3000, desired=2, attach to ALB; rolling deployments.
+- RDS: Postgres or MySQL (Multi-AZ) in private subnets; Secrets Manager for creds; SG ingress only from ECS SG; encryption & TLS enforce.
+- S3 + CloudFront: React build to S3; CloudFront with OAC; behaviors '/'→S3, '/api/*'→ALB; Route 53 alias for myappdomain.com.
+- WAF on CloudFront; CloudWatch alarms; least-privilege IAM; tagging.
+
+Confirmation:
+- For any mutating action, use x-requireConfirmation: ENABLED (OpenAPI action group). Present a change set diff, then execute only on "Approve".
+
+Deliverables:
+- Change set outputs (CloudFront domain, ALB DNS, RDS endpoint, Secret ARN), ECS service status.
+```
+
+> Bedrock Agents support **action groups** defined via OpenAPI with **user confirmation** before invocation; use a Lambda to create/apply **CloudFormation change sets** for safe plan/apply. [\[registry.t...rraform.io\]](https://registry.terraform.io/providers/hashicorp/aws/6.12.0/docs/resources/servicecatalog_provisioned_product), [\[brainstobytes.com\]](https://www.brainstobytes.com/load-balanced-ecs-fargate-from-scratch), [\[docs.aws.amazon.com\]](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-load-balancing.html)
+
+***
+
+## **E. Step‑by‑Step Procedure**
+
+1.  **Decide your NL tool** (Q Developer, Pulumi AI, or Bedrock Agent).
+2.  **Paste the appropriate prompt(s)** above into the tool. Iterate once or twice to refine variables (domain name, RDS engine/size, image URI).
+3.  **Generate IaC and commit to Git** (Terraform/Pulumi/CFN modules + stacks).
+4.  **Provision base infra in a dev environment**:
+    *   VPC (2 AZs), ALB, ECS cluster, S3+CloudFront, Route 53 alias, RDS.
+    *   Verify ALB health checks, CloudFront distribution, OAC policy, and that ECS service registers/deregisters tasks. [\[dev.to\]](https://dev.to/aws-builders/vibe-coding-with-amazon-q-cli-creating-a-new-terraform-environment-in-minutes-33i9)
+5.  **Configure IAM & OIDC for CI**:
+    *   Create an IAM role that GitHub Actions can **assume via OIDC** (trust policy to GitHub).
+    *   Grant minimal permissions for S3, CloudFront invalidations, ECR, ECS, and IaC backend.
+6.  **Wire CI/CD**:
+    *   **Frontend job**: `npm ci && npm run build` → sync to S3 → CloudFront **invalidation** (`/*`).
+    *   **Backend job**: build Docker → push to ECR → **plan** → approval → **apply** → ECS rolling update (ALB keeps traffic on healthy tasks). [\[thelinuxcode.com\]](https://thelinuxcode.com/invoke-lambda-step-function/)
+7.  **Set autoscaling policies**:
+    *   ECS service scales on **CPU/memory** or **ALB request counts** using CloudWatch metrics.
+8.  **Security hardening**:
+    *   Attach **WAF** to CloudFront; check SG rules match the matrix; enforce TLS to RDS; Secrets Manager for DB creds. [\[dev.to\]](https://dev.to/venkatramanan_46/10-aws-identity-and-access-management-iam-best-practices-for-securing-cloud-permissions-and-2l4l)
+9.  **Observability baselines**:
+    *   CloudWatch alarms for ALB **5xx rate**, ECS **CPU/memory**, RDS **connections**.
+    *   Log retention policies; optionally add Amazon Managed **Prometheus/Grafana** later.
+10. **Promote to prod** once dev is green; enable approvals on prod pipeline (Terraform plan → manual approve → apply).
+
+***
+
+## **F. Validation Checklist (tick boxes in Word)**
+
+*   [ ] Route 53 A/AAAA alias → CloudFront; TLS cert in **us‑east‑1** attached to CloudFront. [\[boto3.amazonaws.com\]](https://boto3.amazonaws.com/v1/documentation/api/1.35.9/reference/services/ec2/client/run_instances.html)
+*   [ ] CloudFront origins/behaviors: `/` → S3 (OAC enforced); `/api/*` → ALB (HTTPS). [\[codewithmukesh.com\]](https://codewithmukesh.com/blog/aws-step-functions-lambda-dotnet/)
+*   [ ] ALB listeners: **443** (TLS), **80** redirect; target group **type=ip**; health check `/health`. [\[thelinuxcode.com\]](https://thelinuxcode.com/invoke-lambda-step-function/)
+*   [ ] ECS service registered in target group; rolling update drains old tasks safely. [\[thelinuxcode.com\]](https://thelinuxcode.com/invoke-lambda-step-function/)
+*   [ ] RDS in private subnets; **RDS‑SG** allows only **ECS‑SG**; storage encryption & TLS; **Secrets Manager** in use. [\[dev.to\]](https://dev.to/venkatramanan_46/10-aws-identity-and-access-management-iam-best-practices-for-securing-cloud-permissions-and-2l4l)
+*   [ ] CI/CD uses **GitHub OIDC** (no static keys); frontend builds → S3 + invalidation; backend builds → ECR → ECS update via plan/apply.
+*   [ ] WAF attached to CloudFront; CloudWatch alarms configured; resource tagging present.
+
+***
+
+## **G. Notes & Gotchas**
+
+*   **Fargate target type**: Use **`ip`** target groups; ECS/Fargate uses ENIs/IPs (not instance targets). [\[thelinuxcode.com\]](https://thelinuxcode.com/invoke-lambda-step-function/)
+*   **CloudFront certificates**: Must be in **`us-east-1`**; ALB certificates are **regional** (same as ALB region). [\[boto3.amazonaws.com\]](https://boto3.amazonaws.com/v1/documentation/api/1.35.9/reference/services/ec2/client/run_instances.html)
+*   **OAC vs OAI**: Prefer **Origin Access Control (OAC)** to restrict S3 to CloudFront; OAI is legacy. [\[boto3.amazonaws.com\]](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/ec2-example-managing-instances.html)
+*   **Health checks**: Keep `/health` lightweight and fast for smooth ECS rollouts; ALB only routes to **healthy** targets. [\[aws.amazon.com\]](https://aws.amazon.com/blogs/devops/accelerate-your-terraform-development-with-amazon-q-developer/)
+*   **NAT costs**: Large image pulls/cron can incur NAT data charges; VPC endpoints for S3/ECR/Logs reduce egress.
+*   **DB port choice**: Use **3306** for MySQL or **5432** for Postgres consistently across SGs and connection strings.
+
+***
+
+## **H. Appendix — Rationale Alignment**
+
+*   **Performance**: CloudFront caches static assets at edge; ALB balances API traffic; autoscaling ECS tasks. [\[codewithmukesh.com\]](https://codewithmukesh.com/blog/aws-step-functions-lambda-dotnet/)
+*   **Security**: Private subnets for compute & DB; SG scoping; WAF; OAC; TLS everywhere; least‑privilege IAM; Secrets Manager. [\[dev.to\]](https://dev.to/venkatramanan_46/10-aws-identity-and-access-management-iam-best-practices-for-securing-cloud-permissions-and-2l4l)
+*   **Resilience**: Multi‑AZ VPC, ALB health checks, ECS rolling updates, RDS Multi‑AZ. [\[aws.amazon.com\]](https://aws.amazon.com/blogs/devops/accelerate-your-terraform-development-with-amazon-q-developer/)
+*   **Operability**: IaC with plan/apply; CloudWatch alarms; CI/CD gates; audit trails via CloudTrail. [\[docs.aws.amazon.com\]](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-load-balancing.html)
+
+***
+
+## **I. One‑page “Copy‑Me” Prompt (for quick start)**
+
+> Paste this into **Amazon Q Developer** (or adapt to **Pulumi AI**):
+
+```text
+Goal: Provision a production web stack in AWS us-east-1 for myappdomain.com with CI/CD and zero-downtime updates.
+
+Infra (modules + stacks):
+- VPC across 2 AZs with public subnets for ALB and private subnets for ECS/RDS; route tables, IGW; VPC Endpoints for S3, ECR, CloudWatch Logs.
+- ALB (internet-facing): HTTPS 443 (ACM cert us-east-1), HTTP 80 redirect; target group type=ip; health check /health.
+- ECS Fargate: cluster + service "api" (Node.js/Express, containerPort 3000, desired count 2, rolling deployments), attached to ALB target group.
+- RDS (MySQL 8.0 on 3306 or Postgres 15 on 5432): Multi-AZ, private subnets, SG ingress only from ECS SG; storage encryption; TLS required; creds in Secrets Manager.
+- S3 + CloudFront: React build to S3; block public access; set OAC; CloudFront distribution with default behavior `/` → S3 and behavior `/api/*` → ALB (HTTPS origin). Route 53 alias for myappdomain.com to CloudFront.
+- WAF attached to CloudFront (AWS managed rules); CloudWatch alarms (ALB 5xx, ECS CPU/mem, RDS connections); least-privilege IAM; tagging.
+
+CI/CD (GitHub Actions + OIDC):
+- On merge to main:
+  1) Frontend: npm ci && npm run build → sync to S3 → CloudFront invalidation /*.
+  2) Backend: build Docker image (tag = commit SHA) → push to ECR → IaC plan (update ECS task image) → require approval for prod → IaC apply → rolling update.
+- Provide workflows, IAM role trust for OIDC, and minimal policies.
+
+Deliver:
+- Terraform (or Pulumi) modules and dev/prod stacks, outputs (CloudFront domain, ALB DNS, RDS endpoint, Secret ARN, ECS service).
+- Instructions for plan/apply and environment variable inputs.
+```
+
+**Docs backing these patterns:** ECS with ALB target groups (Fargate, IP); ECS service load balancing & recommendations for ALB with HTTP/HTTPS; ALB health checks & target groups; CloudFront + S3 secure site & OAC; multiple origins in CloudFront (S3 + ALB); RDS security best practices (IAM/Secrets/TLS); Bedrock Agents for conversational plan/apply (optional); CloudFormation change sets for preview → execute. [\[thelinuxcode.com\]](https://thelinuxcode.com/invoke-lambda-step-function/) [\[docs.aws.amazon.com\]](https://docs.aws.amazon.com/bedrock/latest/userguide/action-define.html) [\[aws.amazon.com\]](https://aws.amazon.com/blogs/devops/accelerate-your-terraform-development-with-amazon-q-developer/) [\[boto3.amazonaws.com\]](https://boto3.amazonaws.com/v1/documentation/api/1.35.9/reference/services/ec2/client/run_instances.html), [\[boto3.amazonaws.com\]](https://boto3.amazonaws.com/v1/documentation/api/latest/guide/ec2-example-managing-instances.html) [\[codewithmukesh.com\]](https://codewithmukesh.com/blog/aws-step-functions-lambda-dotnet/) [\[dev.to\]](https://dev.to/venkatramanan_46/10-aws-identity-and-access-management-iam-best-practices-for-securing-cloud-permissions-and-2l4l) [\[registry.t...rraform.io\]](https://registry.terraform.io/providers/hashicorp/aws/6.12.0/docs/resources/servicecatalog_provisioned_product), [\[brainstobytes.com\]](https://www.brainstobytes.com/load-balanced-ecs-fargate-from-scratch) [\[docs.aws.amazon.com\]](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/service-load-balancing.html)
+
+***
+
+### **Last mile: Your engine choice**
+
+Confirm **RDS engine** now (✅ MySQL/3306 or ✅ Postgres/5432). I’ll tailor a short addendum to this playbook with engine‑specific parameters (parameter groups, connection strings, backup settings) and a ready‑made IAM/SG policy block you can paste into your IaC.
