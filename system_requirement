@@ -1,0 +1,214 @@
+Software Requirements Specification (SRS)
+Project: Skill Visibility Platform for Informal Workers
+Target Region: Developing countries (initial pilot: Cameroon)
+Version: 1.0
+
+1. Introduction
+1.1 Purpose
+The platform aims to provide visibility for informal skill workers (e.g., carpenters, tailors, mechanics) by enabling them to showcase their skills, connect with potential clients, and access community resources. It will also log all searches and interactions for analytics to support decision-making by NGOs, policymakers, and community leaders.
+
+1.2 Scope
+Worker profiles with skill descriptions, photos, and endorsements.
+
+Search functionality with logging for analytics.
+
+Community features: announcements, events, and real estate listings.
+
+Mobile-first, multilingual, and low-bandwidth friendly design.
+
+1.3 Stakeholders
+Primary Users: Informal workers, community members, employers.
+
+Secondary Users: NGOs, policymakers, local government, researchers.
+
+Administrators: Platform managers, moderators.
+
+2. Functional Requirements
+2.1 Worker Profiles
+Create/edit profile with name, skill, location, contact info.
+
+Upload photos/videos of work.
+
+Endorsements and ratings from community members.
+
+2.2 Search & Discovery
+Search by skill, location, rating.
+
+Filter results (e.g., “electricians in Douala”).
+
+Log every search query and click for analytics.
+
+2.3 Analytics Dashboard
+Admin dashboard showing demand trends (e.g., “high demand for tailors in Yaoundé”).
+
+Exportable reports (CSV, PDF).
+
+Privacy controls for data use.
+
+2.4 Community Features (Phase 2–3)
+Announcements: Local job postings, training opportunities.
+
+Events: Community workshops, fairs, skill showcases.
+
+Real Estate: Listings for affordable housing and rental spaces.
+
+3. Non-Functional Requirements
+Performance: Fast response under low bandwidth.
+
+Scalability: Support thousands of users across multiple regions.
+
+Security: Data encryption, secure login, GDPR-like compliance.
+
+Localization: French, English, and local languages.
+
+Accessibility: Simple UI, mobile-first design.
+
+4. System Architecture (High-Level)
+Frontend: Mobile-first web app (React Native or Flutter).
+
+Backend: RESTful API (Node.js/Express, Django, or similar).
+
+Database: PostgreSQL/MySQL for structured data; ElasticSearch for search logging.
+
+Analytics: Dashboard powered by Power BI or open-source alternatives.
+
+5. Risks & Mitigation
+Risk	Mitigation
+Low digital literacy among workers	Provide training workshops, simple UI
+Limited internet access	Offline caching, SMS-based features
+Privacy concerns	Transparent consent, anonymized analytics
+Scope creep	Phase-based rollout, clear prioritization
+6. Roadmap
+Phase 1: Worker profiles + search logging.
+
+Phase 2: Analytics dashboard + community announcements/events.
+
+Phase 3: Real estate listings + advanced features (recommendations, AI matching).
+
+
+USER STORIES
+Phase 1: Skill Visibility
+Worker Profiles
+
+As a worker, I want to create a profile with my name, skill, and location so that clients can find me.
+
+As a worker, I want to upload photos/videos of my work so that clients can see proof of my skills.
+
+As a community member, I want to endorse or rate a worker so that others can trust their skills.
+
+Search & Discovery
+
+As a client, I want to search for workers by skill and location so that I can quickly find someone nearby.
+
+As a client, I want to filter search results by rating so that I can choose the most reliable worker.
+
+As an administrator, I want every search query logged so that I can analyze demand trends.
+
+🧩 Phase 2: Analytics & Decision-Making
+As an administrator, I want to view a dashboard of search trends so that I can identify which skills are in high demand.
+
+As an NGO, I want to export reports of worker demand so that I can design targeted training programs.
+
+As a worker, I want to consent to how my data is used so that my privacy is protected.
+
+🧩 Phase 3: Community Features
+Announcements
+
+As a community leader, I want to post announcements so that workers are informed about opportunities.
+
+As a worker, I want to see announcements relevant to my skill so that I don’t miss important updates.
+
+Events
+
+As an organizer, I want to post community events so that workers can attend skill showcases or workshops.
+
+As a worker, I want to RSVP to events so that I can participate and network.
+
+Real Estate
+
+As a landlord, I want to list affordable housing or workshop spaces so that workers can find places to live or work.
+
+As a worker, I want to search for real estate listings so that I can secure housing or workspace.
+
+🧩 Non-Functional Stories
+As a user, I want the platform to work on low bandwidth so that I can access it even with poor internet.
+
+As a user, I want the platform available in French, English, and local languages so that I can use it in my preferred language.
+
+As a user, I want a simple mobile-first interface so that I can easily navigate without technical training.
+
+SPRINTS
+Epics & User Stories
+Epic 1: Worker Profiles
+As a worker, I want to create a profile with my name, skill, and location so that clients can find me.
+
+As a worker, I want to upload photos/videos of my work so that clients can see proof of my skills.
+
+As a community member, I want to endorse or rate a worker so that others can trust their skills.
+
+Epic 2: Search & Discovery
+As a client, I want to search for workers by skill and location so that I can quickly find someone nearby.
+
+As a client, I want to filter search results by rating so that I can choose the most reliable worker.
+
+As an administrator, I want every search query logged so that I can analyze demand trends.
+
+Epic 3: Analytics & Decision-Making
+As an administrator, I want to view a dashboard of search trends so that I can identify which skills are in high demand.
+
+As an NGO, I want to export reports of worker demand so that I can design targeted training programs.
+
+As a worker, I want to consent to how my data is used so that my privacy is protected.
+
+Epic 4: Community Features
+Announcements: Post and view local opportunities.
+
+Events: Organize and RSVP to skill showcases/workshops.
+
+Real Estate: List and search affordable housing/workshop spaces.
+
+Epic 5: Non-Functional Requirements
+As a user, I want the platform to work on low bandwidth so that I can access it even with poor internet.
+
+As a user, I want the platform available in French, English, and local languages so that I can use it in my preferred language.
+
+As a user, I want a simple mobile-first interface so that I can easily navigate without technical training.
+
+🚀 Suggested Sprint Roadmap
+Sprint 1 (Foundations)
+Worker profile creation (basic fields).
+
+Search functionality (skill + location).
+
+Logging of search queries.
+
+Sprint 2 (Enhancements)
+Photo/video uploads for profiles.
+
+Ratings and endorsements.
+
+Search filters (ratings, location).
+
+Sprint 3 (Analytics)
+Admin dashboard with demand trends.
+
+Exportable reports (CSV/PDF).
+
+Privacy consent mechanisms.
+
+Sprint 4 (Community Features – Announcements & Events)
+Announcement posting and viewing.
+
+Event creation and RSVP.
+
+Sprint 5 (Community Features – Real Estate)
+Real estate listing creation.
+
+Search and filter for housing/workspaces.
+
+Sprint 6 (Non-Functional & Scaling)
+Multilingual support.
+
+Offline caching/low-bandwidth optimization.
+
+Security and scalability improvements.
